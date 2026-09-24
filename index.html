@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Casamento Thainara e Vinícius</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<style>
+:root{--cafe:#4a2c20;--terra:#b85c38;--terra-esc:#9a4526;--creme:#f7efe6;--areia:#e6d0b8;--card:#fffaf4}
+*{box-sizing:border-box;margin:0}
+body{font-family:'Jost',sans-serif;background:var(--creme);color:var(--cafe);line-height:1.6;padding:0 18px 40px;text-align:center}
+main{max-width:920px;margin:0 auto}
+.mono{width:132px;height:132px;margin:36px auto 12px;display:block}
+h1,h2{font-family:'Cormorant Garamond',serif;font-weight:600}
+h1{font-size:clamp(2rem,7vw,3.2rem);line-height:1.1}
+h1 em{color:var(--terra);font-style:italic;font-weight:500}
+.data{letter-spacing:.25em;text-transform:uppercase;font-size:.75rem;color:var(--terra);margin:8px 0 18px}
+.welcome{max-width:520px;margin:0 auto 28px;font-weight:300;font-size:1.05rem}
+.drop{background:var(--card);border:2px dashed var(--terra);border-radius:22px;padding:34px 20px;max-width:560px;margin:0 auto 12px;transition:.2s}
+.drop.over{background:var(--areia)}
+.btn{display:inline-block;background:var(--terra);color:#fff;border:0;border-radius:40px;padding:16px 34px;font:500 1.1rem 'Jost',sans-serif;cursor:pointer;box-shadow:0 6px 16px rgba(184,92,56,.35)}
+.btn:hover{background:var(--terra-esc)}
+.hint{font-size:.85rem;margin-top:12px;opacity:.75}
+#status{min-height:1.6em;margin:10px 0;font-weight:500}
+.bar{height:8px;background:var(--areia);border-radius:8px;max-width:560px;margin:0 auto 6px;overflow:hidden;display:none}
+.bar i{display:block;height:100%;width:0;background:var(--terra);transition:width .3s}
+h2{font-size:2rem;margin:34px 0 14px}
+#grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+#grid .it{aspect-ratio:1;border-radius:10px;overflow:hidden;background:var(--areia);cursor:pointer;position:relative}
+#grid img,#grid video{width:100%;height:100%;object-fit:cover;display:block}
+.play{position:absolute;right:8px;bottom:8px;background:rgba(74,44,32,.75);color:#fff;border-radius:20px;font-size:.7rem;padding:2px 8px}
+.empty{grid-column:1/-1;opacity:.7;padding:20px}
+footer{margin-top:44px;padding-top:24px;border-top:1px solid var(--areia);font-family:'Cormorant Garamond',serif;font-size:1.3rem;font-style:italic}
+footer small{display:block;font:300 .8rem 'Jost',sans-serif;font-style:normal;margin-top:6px;opacity:.7}
+#lb{position:fixed;inset:0;background:rgba(40,22,15,.94);display:none;align-items:center;justify-content:center;z-index:9;padding:16px}
+#lb img,#lb video{max-width:100%;max-height:88vh;border-radius:8px}
+#lb b{position:absolute;top:14px;right:22px;color:#fff;font-size:2.2rem;cursor:pointer}
+#demo{background:var(--areia);font-size:.8rem;padding:6px;border-radius:8px;margin-top:14px;display:none}
+</style>
+</head>
+<body>
+<main>
+  <!-- 1. Monograma -->
+  <svg class="mono" viewBox="0 0 200 200" role="img" aria-label="Monograma T e V">
+    <circle cx="100" cy="100" r="94" fill="none" stroke="#b85c38" stroke-width="3"/>
+    <circle cx="100" cy="100" r="86" fill="none" stroke="#4a2c20" stroke-width="1"/>
+    <text x="70" y="122" text-anchor="middle" font-family="Cormorant Garamond,serif" font-size="70" font-weight="600" fill="#4a2c20">T</text>
+    <text x="100" y="112" text-anchor="middle" font-family="Cormorant Garamond,serif" font-size="34" font-style="italic" fill="#b85c38">&amp;</text>
+    <text x="132" y="122" text-anchor="middle" font-family="Cormorant Garamond,serif" font-size="70" font-weight="600" fill="#4a2c20">V</text>
+  </svg>
+
+  <!-- 2. Título -->
+  <h1>Casamento <em>Thainara</em> e <em>Vinícius</em></h1>
+  <p class="data">Nosso álbum compartilhado</p>
+
+  <!-- 3. Boas-vindas -->
+  <p class="welcome">Que alegria ter você com a gente! Compartilhe aqui as fotos e vídeos que você fez do nosso grande dia — cada olhar é um pedacinho da nossa história. Sem cadastro, é só escolher e enviar. 🤎</p>
+
+  <!-- 4. Upload -->
+  <div class="drop" id="drop">
+    <button class="btn" id="pick">📷 Escolher fotos e vídeos</button>
+    <input type="file" id="file" accept="image/*,video/*" multiple hidden>
+    <p class="hint">Toque para selecionar vários de uma vez</p>
+  </div>
+  <div class="bar" id="bar"><i id="fill"></i></div>
+  <p id="status"></p>
+  <p id="demo">Modo demonstração: as fotos aparecem só neste aparelho até você conectar o Supabase.</p>
+
+  <!-- 5. Galeria -->
+  <h2>Nosso álbum</h2>
+  <div id="grid"><p class="empty">Carregando…</p></div>
+
+  <!-- 6. Agradecimento -->
+  <footer>Obrigado por fazer parte deste dia tão especial!<br>Com amor, Thainara &amp; Vinícius
+    <small>Suas memórias ficam guardadas aqui para sempre.</small></footer>
+</main>
+
+<div id="lb"><b id="x">×</b><div id="lbc"></div></div>
+
+<script>
+/* ====== CONFIGURAÇÃO (preencha depois de criar o Supabase) ====== */
+const SUPABASE_URL = "https://wietbnvmiwgqpdyvfico.supabase.co";
+const SUPABASE_KEY = "sb_publishable_DRkMLyqLNoNf1EyzSedEPg_DMRCuQjl";
+const BUCKET = "album";
+/* ================================================================ */
+
+const $ = id => document.getElementById(id);
+const demo = SUPABASE_URL.startsWith("COLE");
+const sb = demo ? null : supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+let items = []; // {url, video}
+const isVideo = n => /\.(mp4|mov|webm|m4v|3gp|avi)$/i.test(n);
+
+function render(){
+  const g = $("grid");
+  if(!items.length){ g.innerHTML = '<p class="empty">Ainda não há fotos. Seja o primeiro a enviar! ✨</p>'; return; }
+  g.innerHTML = "";
+  items.forEach(it=>{
+    const d = document.createElement("div"); d.className = "it";
+    const m = document.createElement(it.video ? "video" : "img");
+    m.src = it.url; if(it.video){ m.preload = "metadata"; m.muted = true; } else { m.loading = "lazy"; }
+    d.appendChild(m);
+    if(it.video){ const p = document.createElement("span"); p.className = "play"; p.textContent = "▶ vídeo"; d.appendChild(p); }
+    d.onclick = ()=>open(it);
+    g.appendChild(d);
+  });
+}
+function open(it){
+  const m = document.createElement(it.video ? "video" : "img");
+  m.src = it.url; if(it.video){ m.controls = true; m.autoplay = true; }
+  $("lbc").replaceChildren(m); $("lb").style.display = "flex";
+}
+function close(){ $("lbc").replaceChildren(); $("lb").style.display = "none"; }
+$("x").onclick = close; $("lb").onclick = e => { if(e.target.id === "lb") close(); };
+
+async function load(){
+  if(demo) return render();
+  const { data, error } = await sb.storage.from(BUCKET).list("", { limit: 500, sortBy: { column: "created_at", order: "desc" } });
+  if(error){ $("grid").innerHTML = '<p class="empty">Não foi possível carregar o álbum agora.</p>'; return; }
+  items = data.filter(f => f.name && !f.name.startsWith(".")).map(f => ({
+    url: sb.storage.from(BUCKET).getPublicUrl(f.name).data.publicUrl, video: isVideo(f.name)
+  }));
+  render();
+}
+
+async function send(files){
+  files = [...files]; if(!files.length) return;
+  $("bar").style.display = "block"; let done = 0, fail = 0;
+  const tick = () => { $("fill").style.width = ((done+fail)/files.length*100) + "%";
+    $("status").textContent = `Enviando ${done+fail} de ${files.length}…`; };
+  tick();
+  const queue = [...files];
+  const worker = async () => {
+    while(queue.length){
+      const f = queue.shift();
+      if(demo){ items.unshift({ url: URL.createObjectURL(f), video: f.type.startsWith("video") }); done++; }
+      else {
+        const ext = (f.name.split(".").pop() || "jpg").toLowerCase();
+        const name = `${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
+        const { error } = await sb.storage.from(BUCKET).upload(name, f, { contentType: f.type });
+        error ? fail++ : done++;
+      }
+      tick();
+    }
+  };
+  await Promise.all([worker(), worker(), worker()]);
+  $("status").textContent = fail
+    ? `✅ ${done} enviado(s). ⚠️ ${fail} não foi/foram (arquivo muito grande?).`
+    : `✅ Pronto! ${done} arquivo(s) enviado(s). Obrigado! 🤎`;
+  setTimeout(()=>{ $("bar").style.display = "none"; $("fill").style.width = "0"; }, 1500);
+  demo ? render() : load();
+}
+
+$("pick").onclick = () => $("file").click();
+$("file").onchange = e => { send(e.target.files); e.target.value = ""; };
+const dz = $("drop");
+["dragover","dragenter"].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add("over"); }));
+["dragleave","drop"].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove("over"); }));
+dz.addEventListener("drop", e => send(e.dataTransfer.files));
+
+if(demo) $("demo").style.display = "block";
+load(); if(!demo) setInterval(load, 30000);
+</script>
+</body>
+</html>
