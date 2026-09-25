@@ -16,6 +16,9 @@ main{max-width:920px;margin:0 auto}
 h1,h2{font-family:'Cormorant Garamond',serif;font-weight:600}
 h1{font-size:clamp(2rem,7vw,3.2rem);line-height:1.1}
 h1 em{color:var(--terra);font-style:italic;font-weight:500}
+.names{white-space:nowrap}
+br.mob{display:none}
+@media (max-width:480px){ br.mob{display:block} }
 .data{letter-spacing:.25em;text-transform:uppercase;font-size:.75rem;color:var(--terra);margin:8px 0 18px}
 .welcome{max-width:520px;margin:0 auto 28px;font-weight:300;font-size:1.05rem}
 .drop{background:var(--card);border:2px dashed var(--terra);border-radius:22px;padding:34px 20px;max-width:560px;margin:0 auto 12px;transition:.2s}
@@ -64,7 +67,7 @@ footer small{display:block;font:300 .8rem 'Jost',sans-serif;font-style:normal;ma
   </svg>
 
   <!-- 2. Título -->
-  <h1>Casamento <em>Thainara</em> e <em>Vinícius</em></h1>
+  <h1>Casamento<br class="mob"> <span class="names"><em>Thainara</em> e <em>Vinícius</em></span></h1>
   <p class="data">Nosso álbum compartilhado</p>
 
   <!-- 3. Boas-vindas -->
