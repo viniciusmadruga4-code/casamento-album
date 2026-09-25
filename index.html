@@ -38,6 +38,18 @@ footer small{display:block;font:300 .8rem 'Jost',sans-serif;font-style:normal;ma
 #lb img,#lb video{max-width:100%;max-height:88vh;border-radius:8px}
 #lb b{position:absolute;top:14px;right:22px;color:#fff;font-size:2.2rem;cursor:pointer}
 #demo{background:var(--areia);font-size:.8rem;padding:6px;border-radius:8px;margin-top:14px;display:none}
+#confirm{position:fixed;inset:0;background:rgba(40,22,15,.55);display:none;align-items:center;justify-content:center;z-index:10;padding:18px}
+#confirm .box{background:var(--card);border-radius:18px;max-width:420px;width:100%;padding:26px 24px;box-shadow:0 12px 30px rgba(0,0,0,.25)}
+#confirm h3{font-family:'Cormorant Garamond',serif;font-size:1.6rem;margin-bottom:10px}
+#confirm p{font-size:.95rem;margin-bottom:8px}
+#confirm .thumbs{display:flex;flex-wrap:wrap;gap:6px;max-height:140px;overflow-y:auto;margin:14px 0}
+#confirm .thumbs div{width:56px;height:56px;border-radius:8px;overflow:hidden;background:var(--areia)}
+#confirm .thumbs img,#confirm .thumbs span{width:100%;height:100%;object-fit:cover;display:flex;align-items:center;justify-content:center;font-size:.65rem;color:var(--cafe)}
+#confirm .row{display:flex;gap:10px;margin-top:18px}
+#confirm .row button{flex:1;border:0;border-radius:30px;padding:13px;font:500 1rem 'Jost',sans-serif;cursor:pointer}
+#cCancel{background:var(--areia);color:var(--cafe)}
+#cOk{background:var(--terra);color:#fff}
+#cOk:hover{background:var(--terra-esc)}
 </style>
 </head>
 <body>
@@ -78,6 +90,19 @@ footer small{display:block;font:300 .8rem 'Jost',sans-serif;font-style:normal;ma
 </main>
 
 <div id="lb"><b id="x">×</b><div id="lbc"></div></div>
+
+<div id="confirm">
+  <div class="box">
+    <h3 id="cTitle">Confirmar envio</h3>
+    <p id="cText">Você tem certeza que quer enviar 1 foto?</p>
+    <p style="font-size:.8rem;opacity:.75">Depois de enviada, a foto fica visível para todos e não pode ser removida por aqui.</p>
+    <div class="thumbs" id="cThumbs"></div>
+    <div class="row">
+      <button id="cCancel">Cancelar</button>
+      <button id="cOk">Sim, enviar</button>
+    </div>
+  </div>
+</div>
 
 <script>
 /* ====== CONFIGURAÇÃO (preencha depois de criar o Supabase) ====== */
@@ -152,12 +177,42 @@ async function send(files){
   demo ? render() : load();
 }
 
+let pending = null;
+
+function askConfirm(files){
+  files = [...files]; if(!files.length) return;
+  pending = files;
+  const n = files.length;
+  $("cText").textContent = n === 1
+    ? "Você tem certeza que quer enviar esta foto?"
+    : `Você tem certeza que quer enviar estas ${n} fotos?`;
+  const box = $("cThumbs"); box.innerHTML = "";
+  files.slice(0, 12).forEach(f => {
+    const d = document.createElement("div");
+    if(f.type.startsWith("image/")){
+      const img = document.createElement("img"); img.src = URL.createObjectURL(f); d.appendChild(img);
+    } else {
+      const s = document.createElement("span"); s.textContent = "🎬"; d.appendChild(s);
+    }
+    box.appendChild(d);
+  });
+  if(files.length > 12){
+    const d = document.createElement("div"); const s = document.createElement("span");
+    s.textContent = "+" + (files.length - 12); d.appendChild(s); box.appendChild(d);
+  }
+  $("confirm").style.display = "flex";
+}
+function closeConfirm(){ $("confirm").style.display = "none"; pending = null; }
+$("cCancel").onclick = closeConfirm;
+$("confirm").addEventListener("click", e => { if(e.target.id === "confirm") closeConfirm(); });
+$("cOk").onclick = () => { const f = pending; closeConfirm(); if(f) send(f); };
+
 $("pick").onclick = () => $("file").click();
-$("file").onchange = e => { send(e.target.files); e.target.value = ""; };
+$("file").onchange = e => { askConfirm(e.target.files); e.target.value = ""; };
 const dz = $("drop");
 ["dragover","dragenter"].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add("over"); }));
 ["dragleave","drop"].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove("over"); }));
-dz.addEventListener("drop", e => send(e.dataTransfer.files));
+dz.addEventListener("drop", e => { dz.classList.remove("over"); askConfirm(e.dataTransfer.files); });
 
 if(demo) $("demo").style.display = "block";
 load(); if(!demo) setInterval(load, 30000);
