@@ -60,6 +60,14 @@ footer small{display:block;font:300 .8rem 'Jost',sans-serif;font-style:normal;ma
 #pOk{background:var(--terra);color:#fff}
 #pOk:hover{background:var(--terra-esc)}
 #pOk:disabled{opacity:.5;cursor:not-allowed}
+a.btn{text-decoration:none}
+.btn.out{background:transparent;color:var(--terra);border:2px solid var(--terra);box-shadow:none;padding:12px 26px;font-size:1rem}
+.btn.out:hover{background:var(--terra);color:#fff}
+.vid{max-width:560px;margin:22px auto 0;padding:20px;border:1px solid var(--areia);border-radius:18px;background:var(--card)}
+.vid p{font-weight:500;margin-bottom:10px}
+.vid small{display:block;margin-top:10px;font-size:.82rem;opacity:.75}
+#notice{max-width:560px;margin:0 auto 12px;font-size:.88rem;font-weight:500;color:var(--terra-esc)}
+#notice:empty{display:none}
 #admin{display:none;background:var(--card);border:1px solid var(--areia);border-radius:18px;padding:22px;max-width:560px;margin:24px auto 0;text-align:left}
 #admin h2{margin:0 0 8px;font-size:1.5rem;text-align:center}
 #admin p{font-size:.9rem;margin-bottom:10px}
@@ -90,14 +98,15 @@ footer small{display:block;font:300 .8rem 'Jost',sans-serif;font-style:normal;ma
   <p class="data">Nosso álbum compartilhado</p>
 
   <!-- 3. Boas-vindas -->
-  <p class="welcome">Que alegria ter você com a gente! Compartilhe aqui as fotos e vídeos que você fez do nosso grande dia — cada olhar é um pedacinho da nossa história. Sem cadastro, é só escolher e enviar. 🤎</p>
+  <p class="welcome">Que alegria ter você com a gente! Compartilhe aqui as fotos que você fez do nosso grande dia — cada olhar é um pedacinho da nossa história. Sem cadastro, é só escolher e enviar. 🤎</p>
 
   <!-- 4. Upload -->
   <div class="drop" id="drop">
-    <button class="btn" id="pick">📷 Escolher fotos e vídeos</button>
-    <input type="file" id="file" accept="image/*,video/*" multiple hidden>
-    <p class="hint">Toque para selecionar vários de uma vez</p>
+    <button class="btn" id="pick">📷 Escolher fotos</button>
+    <input type="file" id="file" accept="image/*" multiple hidden>
+    <p class="hint" id="hint">Toque para selecionar várias de uma vez</p>
   </div>
+  <p id="notice" role="status"></p>
   <div id="preview">
     <h3 id="pTitle">Nenhum arquivo selecionado</h3>
     <p class="sub">Depois de enviada, a foto fica visível para todos e não pode ser removida por aqui. Toque no × para tirar alguma foto da lista.</p>
@@ -111,6 +120,13 @@ footer small{display:block;font:300 .8rem 'Jost',sans-serif;font-style:normal;ma
   <div class="bar" id="bar"><i id="fill"></i></div>
   <p id="status"></p>
   <p id="demo">Modo demonstração: as fotos aparecem só neste aparelho até você conectar o Supabase.</p>
+
+  <!-- Vídeos: vão para o Google Drive -->
+  <div class="vid">
+    <p>🎬 Gravou algum vídeo?</p>
+    <a class="btn out" id="vidBtn" href="#" target="_blank" rel="noopener">📁 Enviar vídeos pelo Google Drive</a>
+    <small>Se tiver algum vídeo, pode subir nessa pasta do Drive.</small>
+  </div>
 
   <!-- 5. Galeria -->
   <h2>Nosso álbum</h2>
@@ -131,6 +147,9 @@ const SUPABASE_KEY = "sb_publishable_DRkMLyqLNoNf1EyzSedEPg_DMRCuQjl";
 const BUCKET = "album";
 const PAGE = 60;            // quantas fotos aparecem por vez na galeria
 const THUMB_DIR = "thumbs"; // pasta das miniaturas dentro da gaveta "album"
+const MAX_PHOTO_MB = 5;     // tamanho máximo de cada foto escolhida (em MB)
+const MAX_BYTES = MAX_PHOTO_MB * 1024 * 1024;
+const VIDEO_UPLOAD_URL = "https://forms.gle/GBmmzKq8abEoP8ws9"; // link do botão de vídeos
 /* ========================== */
 
 const $ = id => document.getElementById(id);
@@ -242,32 +261,11 @@ async function compressImage(file){
   } catch(e){ return file; }
 }
 
-// pega um quadro do vídeo (para usar de miniatura)
-function videoFrame(file){
-  return new Promise(resolve => {
-    const url = URL.createObjectURL(file);
-    const v = document.createElement("video");
-    v.muted = true; v.playsInline = true; v.preload = "auto"; v.src = url;
-    let finished = false, t;
-    const finish = c => { if(finished) return; finished = true; clearTimeout(t); URL.revokeObjectURL(url); resolve(c); };
-    t = setTimeout(() => finish(null), 8000);
-    v.onerror = () => finish(null);
-    v.onloadeddata = () => { try{ v.currentTime = Math.min(0.5, (v.duration || 1) / 2); }catch(e){ finish(null); } };
-    v.onseeked = () => {
-      try{
-        const c = document.createElement("canvas"); c.width = v.videoWidth; c.height = v.videoHeight;
-        c.getContext("2d").drawImage(v, 0, 0); finish(c);
-      }catch(e){ finish(null); }
-    };
-  });
-}
-
 // miniatura leve (lado maior = 400px, uns 20–40 KB)
 async function makeThumb(file){
   try{
-    let src = null;
-    if(file.type.startsWith("image/")) src = await createImageBitmap(file);
-    else if(file.type.startsWith("video/")) src = await videoFrame(file);
+    if(!file.type.startsWith("image/")) return null;
+    const src = await createImageBitmap(file);
     if(!src || !src.width || !src.height) return null;
     const s = Math.min(1, 400 / Math.max(src.width, src.height));
     const c = document.createElement("canvas");
@@ -340,7 +338,41 @@ function renderPreview(){
   $("pOk").disabled = n === 0;
   $("preview").style.display = n === 0 ? "none" : "block";
 }
-function addToPreview(files){ pending = pending.concat([...files]); renderPreview(); }
+const IMG_EXT = /\.(jpe?g|png|webp|heic|heif|gif|avif|bmp)$/i;
+function kindOf(f){
+  if(f.type.startsWith("image/")) return "img";
+  if(f.type.startsWith("video/")) return "vid";
+  if(isVideo(f.name)) return "vid";
+  if(IMG_EXT.test(f.name)) return "img";
+  return "other";
+}
+let noticeTimer;
+function showNotice(t){
+  $("notice").textContent = t;
+  clearTimeout(noticeTimer);
+  if(t) noticeTimer = setTimeout(() => { $("notice").textContent = ""; }, 12000);
+}
+function addToPreview(files){
+  const ok = [], big = [], vids = [], other = [];
+  [...files].forEach(f => {
+    const k = kindOf(f);
+    if(k === "vid") vids.push(f);
+    else if(k !== "img") other.push(f);
+    else if(f.size > MAX_BYTES) big.push(f);
+    else ok.push(f);
+  });
+  const msg = [];
+  if(vids.length) msg.push(vids.length === 1
+    ? "1 vídeo não foi adicionado: vídeos são enviados pelo botão do Google Drive, logo abaixo."
+    : `${vids.length} vídeos não foram adicionados: vídeos são enviados pelo botão do Google Drive, logo abaixo.`);
+  if(big.length) msg.push(big.length === 1
+    ? `1 foto passa de ${MAX_PHOTO_MB} MB e não foi adicionada.`
+    : `${big.length} fotos passam de ${MAX_PHOTO_MB} MB e não foram adicionadas.`);
+  if(other.length) msg.push(`${other.length} arquivo(s) de tipo não aceito (só fotos).`);
+  showNotice(msg.join(" "));
+  pending = pending.concat(ok);
+  renderPreview();
+}
 function closePreview(){ pending = []; renderPreview(); }
 $("pCancel").onclick = closePreview;
 $("pOk").onclick = () => { const f = pending; pending = []; renderPreview(); if(f.length) send(f); };
@@ -417,6 +449,11 @@ async function downloadAll(){
 $("zipBtn").onclick = downloadAll;
 
 /* ---------- INÍCIO ---------- */
+$("hint").textContent = `Toque para selecionar várias de uma vez · só fotos, até ${MAX_PHOTO_MB} MB cada`;
+const vidBtn = $("vidBtn");
+if(VIDEO_UPLOAD_URL.startsWith("COLE")){
+  vidBtn.onclick = e => { e.preventDefault(); alert("Falta colocar o link do Drive no arquivo (VIDEO_UPLOAD_URL)."); };
+} else { vidBtn.href = VIDEO_UPLOAD_URL; }
 if(demo){ $("demo").style.display = "block"; render(); }
 else { loadMore(); setInterval(refreshTop, 30000); }
 </script>
