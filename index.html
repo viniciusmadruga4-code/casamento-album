@@ -25,6 +25,9 @@ br.mob{display:none}
 .drop.over{background:var(--areia)}
 .btn{display:inline-block;background:var(--terra);color:#fff;border:0;border-radius:40px;padding:16px 34px;font:500 1.1rem 'Jost',sans-serif;cursor:pointer;box-shadow:0 6px 16px rgba(184,92,56,.35)}
 .btn:hover{background:var(--terra-esc)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.sec{background:var(--areia);color:var(--cafe);box-shadow:none;padding:12px 28px;font-size:1rem}
+.btn.sec:hover{background:#dcc2a6}
 .hint{font-size:.85rem;margin-top:12px;opacity:.75}
 #status{min-height:1.6em;margin:10px 0;font-weight:500}
 .bar{height:8px;background:var(--areia);border-radius:8px;max-width:560px;margin:0 auto 6px;overflow:hidden;display:none}
@@ -32,9 +35,11 @@ br.mob{display:none}
 h2{font-size:2rem;margin:34px 0 14px}
 #grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
 #grid .it{aspect-ratio:1;border-radius:10px;overflow:hidden;background:var(--areia);cursor:pointer;position:relative}
-#grid img,#grid video{width:100%;height:100%;object-fit:cover;display:block}
+#grid .it.ph{display:flex;align-items:center;justify-content:center;font-size:2rem}
+#grid img{width:100%;height:100%;object-fit:cover;display:block}
 .play{position:absolute;right:8px;bottom:8px;background:rgba(74,44,32,.75);color:#fff;border-radius:20px;font-size:.7rem;padding:2px 8px}
 .empty{grid-column:1/-1;opacity:.7;padding:20px}
+#moreWrap{display:none;margin:22px 0 4px}
 footer{margin-top:44px;padding-top:24px;border-top:1px solid var(--areia);font-family:'Cormorant Garamond',serif;font-size:1.3rem;font-style:italic}
 footer small{display:block;font:300 .8rem 'Jost',sans-serif;font-style:normal;margin-top:6px;opacity:.7}
 #lb{position:fixed;inset:0;background:rgba(40,22,15,.94);display:none;align-items:center;justify-content:center;z-index:9;padding:16px}
@@ -55,10 +60,22 @@ footer small{display:block;font:300 .8rem 'Jost',sans-serif;font-style:normal;ma
 #pOk{background:var(--terra);color:#fff}
 #pOk:hover{background:var(--terra-esc)}
 #pOk:disabled{opacity:.5;cursor:not-allowed}
+#admin{display:none;background:var(--card);border:1px solid var(--areia);border-radius:18px;padding:22px;max-width:560px;margin:24px auto 0;text-align:left}
+#admin h2{margin:0 0 8px;font-size:1.5rem;text-align:center}
+#admin p{font-size:.9rem;margin-bottom:10px}
+#admin .c{text-align:center}
 </style>
 </head>
 <body>
 <main>
+  <!-- Painel escondido: só aparece em  /#baixar-tudo -->
+  <section id="admin">
+    <h2>Baixar todas as fotos</h2>
+    <p>Este botão junta tudo do álbum em arquivos .zip (em partes de uns 300 MB) e baixa no seu computador. Use no computador, com boa internet, e deixe esta aba aberta até terminar. Se o navegador perguntar, permita baixar vários arquivos.</p>
+    <p class="c"><button class="btn sec" id="zipBtn">⬇️ Baixar tudo (.zip)</button></p>
+    <p class="c" id="zipStatus" style="font-weight:500"></p>
+  </section>
+
   <!-- 1. Monograma -->
   <svg class="mono" viewBox="0 0 200 200" role="img" aria-label="Monograma T e V">
     <circle cx="100" cy="100" r="94" fill="none" stroke="#b85c38" stroke-width="3"/>
@@ -98,6 +115,7 @@ footer small{display:block;font:300 .8rem 'Jost',sans-serif;font-style:normal;ma
   <!-- 5. Galeria -->
   <h2>Nosso álbum</h2>
   <div id="grid"><p class="empty">Carregando…</p></div>
+  <div id="moreWrap"><button class="btn sec" id="more">Ver mais fotos</button></div>
 
   <!-- 6. Agradecimento -->
   <footer>Obrigado por fazer parte deste dia tão especial!<br>Com amor, Thainara &amp; Vinícius
@@ -107,56 +125,109 @@ footer small{display:block;font:300 .8rem 'Jost',sans-serif;font-style:normal;ma
 <div id="lb"><b id="x">×</b><div id="lbc"></div></div>
 
 <script>
-/* ====== CONFIGURAÇÃO (preencha depois de criar o Supabase) ====== */
+/* ====== CONFIGURAÇÃO ====== */
 const SUPABASE_URL = "https://wietbnvmiwgqpdyvfico.supabase.co";
 const SUPABASE_KEY = "sb_publishable_DRkMLyqLNoNf1EyzSedEPg_DMRCuQjl";
 const BUCKET = "album";
-/* ================================================================ */
+const PAGE = 60;            // quantas fotos aparecem por vez na galeria
+const THUMB_DIR = "thumbs"; // pasta das miniaturas dentro da gaveta "album"
+/* ========================== */
 
 const $ = id => document.getElementById(id);
 const demo = SUPABASE_URL.startsWith("COLE");
 const sb = demo ? null : supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-let items = []; // {url, video}
 const isVideo = n => /\.(mp4|mov|webm|m4v|3gp|avi)$/i.test(n);
+const baseName = n => n.replace(/\.[^.]+$/, "");
+const thumbPath = n => `${THUMB_DIR}/${baseName(n)}.jpg`;
+const pub = p => sb.storage.from(BUCKET).getPublicUrl(p).data.publicUrl;
+const isFile = f => f && f.id && f.name && !f.name.startsWith("."); // ignora pastas e arquivos escondidos
+
+/* ---------- GALERIA ---------- */
+let items = [];            // {name, url, thumb, video}
+const seen = new Set();
+const tiles = new Map();   // name -> elemento (evita recarregar imagens)
+let offset = 0, hasMore = false, loading = false;
+
+const toItem = f => ({ name: f.name, url: pub(f.name), thumb: pub(thumbPath(f.name)), video: isVideo(f.name) });
+
+function badge(){ const p = document.createElement("span"); p.className = "play"; p.textContent = "▶ vídeo"; return p; }
+
+function mk(it){
+  const d = document.createElement("div"); d.className = "it";
+  const placeholder = () => { d.replaceChildren(); d.classList.add("ph"); d.textContent = it.video ? "🎬" : "🖼️"; if(it.video) d.appendChild(badge()); };
+  const src = it.thumb || (it.video ? null : it.url);
+  if(!src){ placeholder(); }
+  else {
+    const img = document.createElement("img");
+    img.loading = "lazy"; img.decoding = "async"; img.alt = "";
+    let tried = false;
+    img.onerror = () => {
+      if(!it.video && !tried && img.src !== it.url){ tried = true; img.src = it.url; } // foto sem miniatura: usa a original
+      else placeholder();
+    };
+    img.src = src;
+    d.appendChild(img);
+    if(it.video) d.appendChild(badge());
+  }
+  d.onclick = () => openLb(it);
+  return d;
+}
 
 function render(){
   const g = $("grid");
-  if(!items.length){ g.innerHTML = '<p class="empty">Ainda não há fotos. Seja o primeiro a enviar! ✨</p>'; return; }
-  g.innerHTML = "";
-  items.forEach(it=>{
-    const d = document.createElement("div"); d.className = "it";
-    const m = document.createElement(it.video ? "video" : "img");
-    m.src = it.url; if(it.video){ m.preload = "metadata"; m.muted = true; } else { m.loading = "lazy"; }
-    d.appendChild(m);
-    if(it.video){ const p = document.createElement("span"); p.className = "play"; p.textContent = "▶ vídeo"; d.appendChild(p); }
-    d.onclick = ()=>open(it);
-    g.appendChild(d);
-  });
+  if(!items.length){ g.innerHTML = '<p class="empty">Ainda não há fotos. Seja o primeiro a enviar! ✨</p>'; }
+  else g.replaceChildren(...items.map(it => { let t = tiles.get(it.name); if(!t){ t = mk(it); tiles.set(it.name, t); } return t; }));
+  $("moreWrap").style.display = hasMore ? "block" : "none";
 }
-function open(it){
+
+function openLb(it){
   const m = document.createElement(it.video ? "video" : "img");
-  m.src = it.url; if(it.video){ m.controls = true; m.autoplay = true; }
+  m.src = it.url; if(it.video){ m.controls = true; m.autoplay = true; m.playsInline = true; }
   $("lbc").replaceChildren(m); $("lb").style.display = "flex";
 }
-function close(){ $("lbc").replaceChildren(); $("lb").style.display = "none"; }
-$("x").onclick = close; $("lb").onclick = e => { if(e.target.id === "lb") close(); };
+function closeLb(){ $("lbc").replaceChildren(); $("lb").style.display = "none"; }
+$("x").onclick = closeLb; $("lb").onclick = e => { if(e.target.id === "lb") closeLb(); };
 
-async function load(){
-  if(demo) return render();
-  const { data, error } = await sb.storage.from(BUCKET).list("", { limit: 500, sortBy: { column: "created_at", order: "desc" } });
-  if(error){ $("grid").innerHTML = '<p class="empty">Não foi possível carregar o álbum agora.</p>'; return; }
-  items = data.filter(f => f.name && !f.name.startsWith(".")).map(f => ({
-    url: sb.storage.from(BUCKET).getPublicUrl(f.name).data.publicUrl, video: isVideo(f.name)
-  }));
+async function listPage(off){
+  const { data, error } = await sb.storage.from(BUCKET).list("", { limit: PAGE, offset: off, sortBy: { column: "created_at", order: "desc" } });
+  return { data: data || [], error };
+}
+
+async function loadMore(){
+  if(demo || loading) return;
+  loading = true; $("more").disabled = true;
+  const { data, error } = await listPage(offset);
+  loading = false; $("more").disabled = false;
+  if(error){ if(!items.length) $("grid").innerHTML = '<p class="empty">Não foi possível carregar o álbum agora.</p>'; return; }
+  offset += data.length;
+  hasMore = data.length === PAGE;
+  const add = data.filter(isFile).filter(f => !seen.has(f.name));
+  add.forEach(f => seen.add(f.name));
+  items.push(...add.map(toItem));
   render();
 }
 
+// a cada 30s, procura só fotos novas (as mais recentes) e coloca no começo
+async function refreshTop(){
+  if(demo || loading) return;
+  if(!items.length && offset === 0) return loadMore();
+  const { data, error } = await listPage(0);
+  if(error) return;
+  const add = data.filter(isFile).filter(f => !seen.has(f.name));
+  if(!add.length) return;
+  add.forEach(f => seen.add(f.name));
+  items.unshift(...add.map(toItem));
+  offset += add.length;
+  render();
+}
+$("more").onclick = loadMore;
+
+/* ---------- COMPRESSÃO E MINIATURAS ---------- */
 async function compressImage(file){
-  // Só comprime fotos (vídeos e GIFs animados passam direto)
   if(!file.type.startsWith("image/") || file.type === "image/gif") return file;
   try{
     const bitmap = await createImageBitmap(file);
-    const maxDim = 1920; // lado maior da foto, em pixels — mantém boa qualidade para tela e impressão
+    const maxDim = 1920;
     let { width, height } = bitmap;
     if(width > maxDim || height > maxDim){
       const scale = maxDim / Math.max(width, height);
@@ -166,11 +237,47 @@ async function compressImage(file){
     canvas.width = width; canvas.height = height;
     canvas.getContext("2d").drawImage(bitmap, 0, 0, width, height);
     const blob = await new Promise(res => canvas.toBlob(res, "image/jpeg", 0.85));
-    if(!blob || blob.size >= file.size) return file; // se não ficou menor, mantém o original
+    if(!blob || blob.size >= file.size) return file;
     return new File([blob], file.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" });
-  } catch(e){ return file; } // se algo falhar, envia o arquivo original
+  } catch(e){ return file; }
 }
 
+// pega um quadro do vídeo (para usar de miniatura)
+function videoFrame(file){
+  return new Promise(resolve => {
+    const url = URL.createObjectURL(file);
+    const v = document.createElement("video");
+    v.muted = true; v.playsInline = true; v.preload = "auto"; v.src = url;
+    let finished = false, t;
+    const finish = c => { if(finished) return; finished = true; clearTimeout(t); URL.revokeObjectURL(url); resolve(c); };
+    t = setTimeout(() => finish(null), 8000);
+    v.onerror = () => finish(null);
+    v.onloadeddata = () => { try{ v.currentTime = Math.min(0.5, (v.duration || 1) / 2); }catch(e){ finish(null); } };
+    v.onseeked = () => {
+      try{
+        const c = document.createElement("canvas"); c.width = v.videoWidth; c.height = v.videoHeight;
+        c.getContext("2d").drawImage(v, 0, 0); finish(c);
+      }catch(e){ finish(null); }
+    };
+  });
+}
+
+// miniatura leve (lado maior = 400px, uns 20–40 KB)
+async function makeThumb(file){
+  try{
+    let src = null;
+    if(file.type.startsWith("image/")) src = await createImageBitmap(file);
+    else if(file.type.startsWith("video/")) src = await videoFrame(file);
+    if(!src || !src.width || !src.height) return null;
+    const s = Math.min(1, 400 / Math.max(src.width, src.height));
+    const c = document.createElement("canvas");
+    c.width = Math.round(src.width * s); c.height = Math.round(src.height * s);
+    c.getContext("2d").drawImage(src, 0, 0, c.width, c.height);
+    return await new Promise(res => c.toBlob(res, "image/jpeg", 0.72));
+  } catch(e){ return null; }
+}
+
+/* ---------- ENVIO ---------- */
 async function send(files){
   files = [...files]; if(!files.length) return;
   $("bar").style.display = "block"; let done = 0, fail = 0;
@@ -182,12 +289,19 @@ async function send(files){
     while(queue.length){
       let f = queue.shift();
       f = await compressImage(f);
-      if(demo){ items.unshift({ url: URL.createObjectURL(f), video: f.type.startsWith("video") }); done++; }
-      else {
+      if(demo){
+        const u = URL.createObjectURL(f), vid = f.type.startsWith("video");
+        items.unshift({ name: "demo-" + Date.now() + "-" + Math.random(), url: u, thumb: vid ? null : u, video: vid }); done++;
+      } else {
         const ext = (f.name.split(".").pop() || "jpg").toLowerCase();
         const name = `${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
-        const { error } = await sb.storage.from(BUCKET).upload(name, f, { contentType: f.type });
-        error ? fail++ : done++;
+        const { error } = await sb.storage.from(BUCKET).upload(name, f, { contentType: f.type, cacheControl: "31536000" });
+        if(error){ fail++; }
+        else {
+          done++;
+          const tb = await makeThumb(f); // se a miniatura falhar, a foto continua enviada normalmente
+          if(tb) await sb.storage.from(BUCKET).upload(thumbPath(name), tb, { contentType: "image/jpeg", cacheControl: "31536000" });
+        }
       }
       tick();
     }
@@ -197,17 +311,20 @@ async function send(files){
     ? `✅ ${done} enviado(s). ⚠️ ${fail} não foi/foram (arquivo muito grande?).`
     : `✅ Pronto! ${done} arquivo(s) enviado(s). Obrigado! 🤎`;
   setTimeout(()=>{ $("bar").style.display = "none"; $("fill").style.width = "0"; }, 1500);
-  demo ? render() : load();
+  demo ? render() : refreshTop();
 }
 
+/* ---------- PREVIEW ANTES DE ENVIAR ---------- */
 let pending = [];
+const urlCache = new WeakMap();
+const previewUrl = f => { let u = urlCache.get(f); if(!u){ u = URL.createObjectURL(f); urlCache.set(f, u); } return u; };
 
 function renderPreview(){
   const box = $("pThumbs"); box.innerHTML = "";
   pending.forEach((f, i) => {
     const d = document.createElement("div"); d.className = "thumb";
     if(f.type.startsWith("image/")){
-      const img = document.createElement("img"); img.src = URL.createObjectURL(f); d.appendChild(img);
+      const img = document.createElement("img"); img.src = previewUrl(f); d.appendChild(img);
     } else {
       const s = document.createElement("span"); s.textContent = "🎬"; d.appendChild(s);
     }
@@ -223,10 +340,7 @@ function renderPreview(){
   $("pOk").disabled = n === 0;
   $("preview").style.display = n === 0 ? "none" : "block";
 }
-function addToPreview(files){
-  pending = pending.concat([...files]);
-  renderPreview();
-}
+function addToPreview(files){ pending = pending.concat([...files]); renderPreview(); }
 function closePreview(){ pending = []; renderPreview(); }
 $("pCancel").onclick = closePreview;
 $("pOk").onclick = () => { const f = pending; pending = []; renderPreview(); if(f.length) send(f); };
@@ -238,8 +352,73 @@ const dz = $("drop");
 ["dragleave","drop"].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove("over"); }));
 dz.addEventListener("drop", e => { dz.classList.remove("over"); addToPreview(e.dataTransfer.files); });
 
-if(demo) $("demo").style.display = "block";
-load(); if(!demo) setInterval(load, 30000);
+/* ---------- PAINEL ESCONDIDO: BAIXAR TUDO (.zip) ---------- */
+function checkAdmin(){ $("admin").style.display = (location.hash === "#baixar-tudo" && !demo) ? "block" : "none"; }
+window.addEventListener("hashchange", checkAdmin); checkAdmin();
+
+function loadJSZip(){
+  return window.JSZip ? Promise.resolve() : new Promise((ok, no) => {
+    const s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js";
+    s.onload = ok; s.onerror = no; document.head.appendChild(s);
+  });
+}
+async function listAll(){
+  let all = [], off = 0;
+  while(true){
+    const { data, error } = await sb.storage.from(BUCKET).list("", { limit: 1000, offset: off, sortBy: { column: "name", order: "asc" } });
+    if(error) throw error;
+    all = all.concat(data);
+    if(data.length < 1000) break;
+    off += 1000;
+  }
+  return all.filter(isFile); // só os arquivos originais (sem a pasta de miniaturas)
+}
+async function downloadAll(){
+  const btn = $("zipBtn"), st = $("zipStatus"); btn.disabled = true;
+  try{
+    st.textContent = "Preparando…";
+    await loadJSZip();
+    const files = await listAll();
+    if(!files.length){ st.textContent = "Ainda não há arquivos para baixar."; btn.disabled = false; return; }
+    // divide em partes de ~300 MB (ou 150 arquivos) para não travar o navegador
+    const parts = []; let cur = [], size = 0;
+    files.forEach(f => {
+      const s = (f.metadata && f.metadata.size) || 0;
+      if(cur.length && (size + s > 300*1024*1024 || cur.length >= 150)){ parts.push(cur); cur = []; size = 0; }
+      cur.push(f); size += s;
+    });
+    if(cur.length) parts.push(cur);
+    let n = 0;
+    for(let p = 0; p < parts.length; p++){
+      const zip = new JSZip();
+      const queue = [...parts[p]];
+      const worker = async () => {
+        while(queue.length){
+          const f = queue.shift();
+          st.textContent = `Parte ${p+1} de ${parts.length}: baixando arquivo ${++n} de ${files.length}…`;
+          const r = await fetch(pub(f.name));
+          if(!r.ok) throw new Error(f.name);
+          zip.file(f.name, await r.blob());
+        }
+      };
+      await Promise.all([worker(), worker(), worker()]);
+      st.textContent = `Parte ${p+1} de ${parts.length}: montando o .zip…`;
+      const blob = await zip.generateAsync({ type: "blob", compression: "STORE" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob); a.download = `album-casamento-parte-${p+1}.zip`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    }
+    st.textContent = `✅ Pronto! ${parts.length} arquivo(s) .zip baixado(s), com ${files.length} fotos/vídeos no total.`;
+  } catch(e){ st.textContent = "⚠️ Algo falhou no download. Confira a internet e tente de novo."; }
+  btn.disabled = false;
+}
+$("zipBtn").onclick = downloadAll;
+
+/* ---------- INÍCIO ---------- */
+if(demo){ $("demo").style.display = "block"; render(); }
+else { loadMore(); setInterval(refreshTop, 30000); }
 </script>
 </body>
 </html>
