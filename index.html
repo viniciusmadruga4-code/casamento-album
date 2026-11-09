@@ -6,7 +6,6 @@
 <title>Casamento Thainara e Vinícius</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <style>
 :root{--cafe:#4a2c20;--terra:#b85c38;--terra-esc:#9a4526;--creme:#f7efe6;--areia:#e6d0b8;--card:#fffaf4}
 *{box-sizing:border-box;margin:0}
@@ -37,13 +36,12 @@ h2{font-size:2rem;margin:34px 0 14px}
 #grid .it{aspect-ratio:1;border-radius:10px;overflow:hidden;background:var(--areia);cursor:pointer;position:relative}
 #grid .it.ph{display:flex;align-items:center;justify-content:center;font-size:2rem}
 #grid img{width:100%;height:100%;object-fit:cover;display:block}
-.play{position:absolute;right:8px;bottom:8px;background:rgba(74,44,32,.75);color:#fff;border-radius:20px;font-size:.7rem;padding:2px 8px}
 .empty{grid-column:1/-1;opacity:.7;padding:20px}
 #moreWrap{display:none;margin:22px 0 4px}
 footer{margin-top:44px;padding-top:24px;border-top:1px solid var(--areia);font-family:'Cormorant Garamond',serif;font-size:1.3rem;font-style:italic}
 footer small{display:block;font:300 .8rem 'Jost',sans-serif;font-style:normal;margin-top:6px;opacity:.7}
 #lb{position:fixed;inset:0;background:rgba(40,22,15,.94);display:none;align-items:center;justify-content:center;z-index:9;padding:16px}
-#lb img,#lb video{max-width:100%;max-height:88vh;border-radius:8px}
+#lb img{max-width:100%;max-height:88vh;border-radius:8px}
 #lb b{position:absolute;top:14px;right:22px;color:#fff;font-size:2.2rem;cursor:pointer}
 #demo{background:var(--areia);font-size:.8rem;padding:6px;border-radius:8px;margin-top:14px;display:none}
 #preview{display:none;max-width:560px;margin:0 auto 18px;background:var(--card);border-radius:20px;padding:22px 20px;box-shadow:0 8px 22px rgba(74,44,32,.12);text-align:left}
@@ -79,7 +77,7 @@ a.btn{text-decoration:none}
   <!-- Painel escondido: só aparece em  /#baixar-tudo -->
   <section id="admin">
     <h2>Baixar todas as fotos</h2>
-    <p>Este botão junta tudo do álbum em arquivos .zip (em partes de uns 300 MB) e baixa no seu computador. Use no computador, com boa internet, e deixe esta aba aberta até terminar. Se o navegador perguntar, permita baixar vários arquivos.</p>
+    <p>Este botão junta todas as fotos do álbum em arquivos .zip (em partes de 150 fotos) e baixa no seu computador. Use no computador, com boa internet, e deixe esta aba aberta até terminar. Se o navegador perguntar, permita baixar vários arquivos.</p>
     <p class="c"><button class="btn sec" id="zipBtn">⬇️ Baixar tudo (.zip)</button></p>
     <p class="c" id="zipStatus" style="font-weight:500"></p>
   </section>
@@ -119,7 +117,7 @@ a.btn{text-decoration:none}
 
   <div class="bar" id="bar"><i id="fill"></i></div>
   <p id="status"></p>
-  <p id="demo">Modo demonstração: as fotos aparecem só neste aparelho até você conectar o Supabase.</p>
+  <p id="demo">Modo demonstração: as fotos aparecem só neste aparelho até você conectar o Firebase.</p>
 
   <!-- Vídeos: vão para o Google Drive -->
   <div class="vid">
@@ -140,54 +138,56 @@ a.btn{text-decoration:none}
 
 <div id="lb"><b id="x">×</b><div id="lbc"></div></div>
 
-<script>
-/* ====== CONFIGURAÇÃO ====== */
-const SUPABASE_URL = "https://wietbnvmiwgqpdyvfico.supabase.co";
-const SUPABASE_KEY = "sb_publishable_DRkMLyqLNoNf1EyzSedEPg_DMRCuQjl";
-const BUCKET = "album";
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import { getStorage, ref, uploadBytes, list, listAll } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-storage.js";
+
+/* ====== CONFIGURAÇÃO ======
+   PASSO IMPORTANTE: troque o bloco "firebaseConfig" abaixo pelo que o Firebase te mostrou
+   (do "const firebaseConfig = {" até o "};"). */
+const firebaseConfig = {
+  apiKey: "AIzaSyAOmilDmDdRxas_i7XmLMhQB2usMqqZ7Ug",
+  authDomain: "casamento-thainara-e-vinicius.firebaseapp.com",
+  projectId: "casamento-thainara-e-vinicius",
+  storageBucket: "casamento-thainara-e-vinicius.firebasestorage.app",
+  messagingSenderId: "807111712262",
+  appId: "1:807111712262:web:0cae93e6d13aa326042d87",
+  measurementId: "G-B6J8SVRBLT"
+};
 const PAGE = 60;            // quantas fotos aparecem por vez na galeria
-const THUMB_DIR = "thumbs"; // pasta das miniaturas dentro da gaveta "album"
 const MAX_PHOTO_MB = 5;     // tamanho máximo de cada foto escolhida (em MB)
 const MAX_BYTES = MAX_PHOTO_MB * 1024 * 1024;
 const VIDEO_UPLOAD_URL = "https://forms.gle/GBmmzKq8abEoP8ws9"; // link do botão de vídeos
 /* ========================== */
 
 const $ = id => document.getElementById(id);
-const demo = SUPABASE_URL.startsWith("COLE");
-const sb = demo ? null : supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const demo = !firebaseConfig.apiKey || firebaseConfig.apiKey.startsWith("COLE");
+const storage = demo ? null : getStorage(initializeApp(firebaseConfig));
+const BUCKET = demo ? "" : firebaseConfig.storageBucket;
 const isVideo = n => /\.(mp4|mov|webm|m4v|3gp|avi)$/i.test(n);
-const baseName = n => n.replace(/\.[^.]+$/, "");
-const thumbPath = n => `${THUMB_DIR}/${baseName(n)}.jpg`;
-const pub = p => sb.storage.from(BUCKET).getPublicUrl(p).data.publicUrl;
-const isFile = f => f && f.id && f.name && !f.name.startsWith("."); // ignora pastas e arquivos escondidos
+const baseOf = n => n.replace(/\.[^.]+$/, "");
+// endereço público de um arquivo (funciona porque as regras liberam a leitura)
+const urlOf = path => `https://firebasestorage.googleapis.com/v0/b/${BUCKET}/o/${encodeURIComponent(path)}?alt=media`;
 
 /* ---------- GALERIA ---------- */
-let items = [];            // {name, url, thumb, video}
+let items = [];            // {name, url, thumb}
 const seen = new Set();
 const tiles = new Map();   // name -> elemento (evita recarregar imagens)
-let offset = 0, hasMore = false, loading = false;
+let nextToken, hasMore = false, loading = false, started = false;
 
-const toItem = f => ({ name: f.name, url: pub(f.name), thumb: pub(thumbPath(f.name)), video: isVideo(f.name) });
-
-function badge(){ const p = document.createElement("span"); p.className = "play"; p.textContent = "▶ vídeo"; return p; }
+const toItem = r => ({ name: r.name, url: urlOf("photos/" + r.name), thumb: urlOf("thumbs/" + baseOf(r.name) + ".jpg") });
 
 function mk(it){
   const d = document.createElement("div"); d.className = "it";
-  const placeholder = () => { d.replaceChildren(); d.classList.add("ph"); d.textContent = it.video ? "🎬" : "🖼️"; if(it.video) d.appendChild(badge()); };
-  const src = it.thumb || (it.video ? null : it.url);
-  if(!src){ placeholder(); }
-  else {
-    const img = document.createElement("img");
-    img.loading = "lazy"; img.decoding = "async"; img.alt = "";
-    let tried = false;
-    img.onerror = () => {
-      if(!it.video && !tried && img.src !== it.url){ tried = true; img.src = it.url; } // foto sem miniatura: usa a original
-      else placeholder();
-    };
-    img.src = src;
-    d.appendChild(img);
-    if(it.video) d.appendChild(badge());
-  }
+  const img = document.createElement("img");
+  img.loading = "lazy"; img.decoding = "async"; img.alt = "";
+  let tried = false;
+  img.onerror = () => {
+    if(!tried && it.url !== it.thumb){ tried = true; img.src = it.url; } // sem miniatura: usa a foto original
+    else { d.replaceChildren(); d.classList.add("ph"); d.textContent = "🖼️"; }
+  };
+  img.src = it.thumb || it.url;
+  d.appendChild(img);
   d.onclick = () => openLb(it);
   return d;
 }
@@ -200,44 +200,43 @@ function render(){
 }
 
 function openLb(it){
-  const m = document.createElement(it.video ? "video" : "img");
-  m.src = it.url; if(it.video){ m.controls = true; m.autoplay = true; m.playsInline = true; }
+  const m = document.createElement("img"); m.src = it.url;
   $("lbc").replaceChildren(m); $("lb").style.display = "flex";
 }
 function closeLb(){ $("lbc").replaceChildren(); $("lb").style.display = "none"; }
 $("x").onclick = closeLb; $("lb").onclick = e => { if(e.target.id === "lb") closeLb(); };
 
-async function listPage(off){
-  const { data, error } = await sb.storage.from(BUCKET).list("", { limit: PAGE, offset: off, sortBy: { column: "created_at", order: "desc" } });
-  return { data: data || [], error };
-}
-
+// Os nomes dos arquivos começam com um número que diminui com o tempo,
+// então a lista já vem das fotos mais NOVAS para as mais antigas.
 async function loadMore(){
   if(demo || loading) return;
   loading = true; $("more").disabled = true;
-  const { data, error } = await listPage(offset);
+  try{
+    const res = await list(ref(storage, "photos"), { maxResults: PAGE, pageToken: nextToken });
+    nextToken = res.nextPageToken; hasMore = !!res.nextPageToken;
+    const add = res.items.filter(r => !seen.has(r.name));
+    add.forEach(r => seen.add(r.name));
+    items.push(...add.map(toItem));
+    started = true;
+    render();
+  } catch(e){
+    if(!items.length) $("grid").innerHTML = '<p class="empty">Não foi possível carregar o álbum agora.</p>';
+  }
   loading = false; $("more").disabled = false;
-  if(error){ if(!items.length) $("grid").innerHTML = '<p class="empty">Não foi possível carregar o álbum agora.</p>'; return; }
-  offset += data.length;
-  hasMore = data.length === PAGE;
-  const add = data.filter(isFile).filter(f => !seen.has(f.name));
-  add.forEach(f => seen.add(f.name));
-  items.push(...add.map(toItem));
-  render();
 }
 
-// a cada 30s, procura só fotos novas (as mais recentes) e coloca no começo
+// a cada 30s, procura só fotos novas e coloca no começo
 async function refreshTop(){
   if(demo || loading) return;
-  if(!items.length && offset === 0) return loadMore();
-  const { data, error } = await listPage(0);
-  if(error) return;
-  const add = data.filter(isFile).filter(f => !seen.has(f.name));
-  if(!add.length) return;
-  add.forEach(f => seen.add(f.name));
-  items.unshift(...add.map(toItem));
-  offset += add.length;
-  render();
+  if(!started) return loadMore();
+  try{
+    const res = await list(ref(storage, "photos"), { maxResults: PAGE });
+    const add = res.items.filter(r => !seen.has(r.name));
+    if(!add.length) return;
+    add.forEach(r => seen.add(r.name));
+    items.unshift(...add.map(toItem));
+    render();
+  } catch(e){}
 }
 $("more").onclick = loadMore;
 
@@ -276,6 +275,7 @@ async function makeThumb(file){
 }
 
 /* ---------- ENVIO ---------- */
+const CACHE = "public,max-age=31536000";
 async function send(files){
   files = [...files]; if(!files.length) return;
   $("bar").style.display = "block"; let done = 0, fail = 0;
@@ -288,26 +288,28 @@ async function send(files){
       let f = queue.shift();
       f = await compressImage(f);
       if(demo){
-        const u = URL.createObjectURL(f), vid = f.type.startsWith("video");
-        items.unshift({ name: "demo-" + Date.now() + "-" + Math.random(), url: u, thumb: vid ? null : u, video: vid }); done++;
+        const u = URL.createObjectURL(f);
+        items.unshift({ name: "demo-" + Date.now() + "-" + Math.random(), url: u, thumb: u }); done++;
       } else {
-        const ext = (f.name.split(".").pop() || "jpg").toLowerCase();
-        const name = `${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
-        const { error } = await sb.storage.from(BUCKET).upload(name, f, { contentType: f.type, cacheControl: "31536000" });
-        if(error){ fail++; }
-        else {
+        // número que diminui com o tempo => fotos novas ficam no começo da lista
+        const stamp = String(9999999999999 - Date.now()).padStart(13, "0");
+        const rand = Math.random().toString(36).slice(2, 8);
+        const ext = ((f.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "")) || "jpg";
+        const name = `${stamp}-${rand}.${ext}`;
+        try{
+          await uploadBytes(ref(storage, "photos/" + name), f, { contentType: f.type || "image/jpeg", cacheControl: CACHE });
           done++;
           const tb = await makeThumb(f); // se a miniatura falhar, a foto continua enviada normalmente
-          if(tb) await sb.storage.from(BUCKET).upload(thumbPath(name), tb, { contentType: "image/jpeg", cacheControl: "31536000" });
-        }
+          if(tb){ try{ await uploadBytes(ref(storage, "thumbs/" + baseOf(name) + ".jpg"), tb, { contentType: "image/jpeg", cacheControl: CACHE }); }catch(e){} }
+        } catch(e){ fail++; }
       }
       tick();
     }
   };
   await Promise.all([worker(), worker(), worker()]);
   $("status").textContent = fail
-    ? `✅ ${done} enviado(s). ⚠️ ${fail} não foi/foram (arquivo muito grande?).`
-    : `✅ Pronto! ${done} arquivo(s) enviado(s). Obrigado! 🤎`;
+    ? `✅ ${done} enviada(s). ⚠️ ${fail} não foi/foram (tente de novo).`
+    : `✅ Pronto! ${done} foto(s) enviada(s). Obrigado! 🤎`;
   setTimeout(()=>{ $("bar").style.display = "none"; $("fill").style.width = "0"; }, 1500);
   demo ? render() : refreshTop();
 }
@@ -321,11 +323,7 @@ function renderPreview(){
   const box = $("pThumbs"); box.innerHTML = "";
   pending.forEach((f, i) => {
     const d = document.createElement("div"); d.className = "thumb";
-    if(f.type.startsWith("image/")){
-      const img = document.createElement("img"); img.src = previewUrl(f); d.appendChild(img);
-    } else {
-      const s = document.createElement("span"); s.textContent = "🎬"; d.appendChild(s);
-    }
+    const img = document.createElement("img"); img.src = previewUrl(f); d.appendChild(img);
     const rm = document.createElement("button"); rm.className = "rm"; rm.type = "button";
     rm.textContent = "×"; rm.setAttribute("aria-label", "Remover esta foto");
     rm.onclick = () => { pending.splice(i, 1); renderPreview(); };
@@ -338,6 +336,7 @@ function renderPreview(){
   $("pOk").disabled = n === 0;
   $("preview").style.display = n === 0 ? "none" : "block";
 }
+
 const IMG_EXT = /\.(jpe?g|png|webp|heic|heif|gif|avif|bmp)$/i;
 function kindOf(f){
   if(f.type.startsWith("image/")) return "img";
@@ -395,55 +394,39 @@ function loadJSZip(){
     s.onload = ok; s.onerror = no; document.head.appendChild(s);
   });
 }
-async function listAll(){
-  let all = [], off = 0;
-  while(true){
-    const { data, error } = await sb.storage.from(BUCKET).list("", { limit: 1000, offset: off, sortBy: { column: "name", order: "asc" } });
-    if(error) throw error;
-    all = all.concat(data);
-    if(data.length < 1000) break;
-    off += 1000;
-  }
-  return all.filter(isFile); // só os arquivos originais (sem a pasta de miniaturas)
-}
 async function downloadAll(){
   const btn = $("zipBtn"), st = $("zipStatus"); btn.disabled = true;
   try{
     st.textContent = "Preparando…";
     await loadJSZip();
-    const files = await listAll();
-    if(!files.length){ st.textContent = "Ainda não há arquivos para baixar."; btn.disabled = false; return; }
-    // divide em partes de ~300 MB (ou 150 arquivos) para não travar o navegador
-    const parts = []; let cur = [], size = 0;
-    files.forEach(f => {
-      const s = (f.metadata && f.metadata.size) || 0;
-      if(cur.length && (size + s > 300*1024*1024 || cur.length >= 150)){ parts.push(cur); cur = []; size = 0; }
-      cur.push(f); size += s;
-    });
-    if(cur.length) parts.push(cur);
+    const res = await listAll(ref(storage, "photos"));
+    const files = res.items.slice().reverse(); // da mais antiga para a mais nova
+    if(!files.length){ st.textContent = "Ainda não há fotos para baixar."; btn.disabled = false; return; }
+    const SIZE = 150, total = files.length, nParts = Math.ceil(total / SIZE);
     let n = 0;
-    for(let p = 0; p < parts.length; p++){
+    for(let p = 0; p < nParts; p++){
       const zip = new JSZip();
-      const queue = [...parts[p]];
+      const queue = files.slice(p * SIZE, (p + 1) * SIZE).map((r, i) => ({ r, idx: p * SIZE + i }));
       const worker = async () => {
         while(queue.length){
-          const f = queue.shift();
-          st.textContent = `Parte ${p+1} de ${parts.length}: baixando arquivo ${++n} de ${files.length}…`;
-          const r = await fetch(pub(f.name));
-          if(!r.ok) throw new Error(f.name);
-          zip.file(f.name, await r.blob());
+          const { r, idx } = queue.shift();
+          st.textContent = `Parte ${p+1} de ${nParts}: baixando foto ${++n} de ${total}…`;
+          const resp = await fetch(urlOf(r.fullPath));
+          if(!resp.ok) throw new Error(r.name);
+          const ext = (r.name.split(".").pop() || "jpg").toLowerCase();
+          zip.file(`foto-${String(idx + 1).padStart(4, "0")}.${ext}`, await resp.blob());
         }
       };
       await Promise.all([worker(), worker(), worker()]);
-      st.textContent = `Parte ${p+1} de ${parts.length}: montando o .zip…`;
+      st.textContent = `Parte ${p+1} de ${nParts}: montando o .zip…`;
       const blob = await zip.generateAsync({ type: "blob", compression: "STORE" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob); a.download = `album-casamento-parte-${p+1}.zip`;
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 60000);
     }
-    st.textContent = `✅ Pronto! ${parts.length} arquivo(s) .zip baixado(s), com ${files.length} fotos/vídeos no total.`;
-  } catch(e){ st.textContent = "⚠️ Algo falhou no download. Confira a internet e tente de novo."; }
+    st.textContent = `✅ Pronto! ${nParts} arquivo(s) .zip baixado(s), com ${total} fotos no total.`;
+  } catch(e){ st.textContent = "⚠️ Não consegui baixar. Confira a internet e se o passo do CORS foi feito (veja o guia)."; }
   btn.disabled = false;
 }
 $("zipBtn").onclick = downloadAll;
